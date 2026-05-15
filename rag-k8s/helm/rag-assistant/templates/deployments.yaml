@@ -1,0 +1,123 @@
+---
+# ── RAG Python API ─────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "rag-assistant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rag-api
+spec:
+  replicas: {{ .Values.ragApi.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "rag-assistant.ragApi.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "rag-assistant.ragApi.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: rag-api
+          image: "{{ .Values.ragApi.image.repository }}:{{ .Values.ragApi.image.tag }}"
+          imagePullPolicy: {{ .Values.ragApi.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.ragApi.port }}
+              name: http
+          envFrom:
+            - configMapRef:
+                name: rag-config
+          volumeMounts:
+            - name: faiss-storage
+              mountPath: {{ .Values.config.faissIndexPath }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.ragApi.probes.liveness }}
+              port: {{ .Values.ragApi.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.ragApi.probes.readiness }}
+              port: {{ .Values.ragApi.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.ragApi.resources | nindent 12 }}
+      volumes:
+        - name: faiss-storage
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: faiss-index-pvc
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+
+---
+# ── C# REST Backend ────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-backend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "rag-assistant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rest-backend
+spec:
+  replicas: {{ .Values.restBackend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "rag-assistant.restBackend.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "rag-assistant.restBackend.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: rest-backend
+          image: "{{ .Values.restBackend.image.repository }}:{{ .Values.restBackend.image.tag }}"
+          imagePullPolicy: {{ .Values.restBackend.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.restBackend.port }}
+              name: http
+          envFrom:
+            - configMapRef:
+                name: rag-config
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ASPNETCORE_URLS
+              value: "http://+:{{ .Values.restBackend.port }}"
+            - name: RAG_API_URL
+              value: "http://rag-api-svc:{{ .Values.ragApi.port }}"
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.restBackend.probes.liveness }}
+              port: {{ .Values.restBackend.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.restBackend.probes.readiness }}
+              port: {{ .Values.restBackend.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.restBackend.resources | nindent 12 }}

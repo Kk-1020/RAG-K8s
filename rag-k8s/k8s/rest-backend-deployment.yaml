@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rest-backend
+  namespace: rag-assistant
+  labels:
+    app.kubernetes.io/name: rag-assistant
+    app.kubernetes.io/component: rest-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rest-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: rest-backend
+        app.kubernetes.io/component: rest-backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      containers:
+        - name: rest-backend
+          image: rest-backend:latest        # replace with your registry path
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 5000
+              name: http
+
+          envFrom:
+            - configMapRef:
+                name: rag-config
+
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: ASPNETCORE_URLS
+              value: "http://+:5000"
+            # RAG API internal endpoint injected for service-to-service calls
+            - name: RAG_API_URL
+              value: "http://rag-api-svc:8000"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "512Mi"

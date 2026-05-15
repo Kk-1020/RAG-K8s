@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-api
+  namespace: rag-assistant
+  labels:
+    app.kubernetes.io/name: rag-assistant
+    app.kubernetes.io/component: rag-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rag-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0         # zero-downtime deploys
+  template:
+    metadata:
+      labels:
+        app: rag-api
+        app.kubernetes.io/component: rag-api
+    spec:
+      # ── Security hardening ──────────────────────────────────────────────────
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: rag-api
+          image: rag-api:latest           # replace with your registry path
+          imagePullPolicy: IfNotPresent   # use Always in production
+
+          ports:
+            - containerPort: 8000
+              name: http
+
+          # ── Env from ConfigMap ─────────────────────────────────────────────
+          envFrom:
+            - configMapRef:
+                name: rag-config
+
+          # ── Secrets (API keys, DB creds, etc.) ───────────────────────────
+          # Uncomment and populate Secret before deploying.
+          # env:
+          #   - name: OPENAI_API_KEY
+          #     valueFrom:
+          #       secretKeyRef:
+          #         name: rag-secrets
+          #         key: openai-api-key
+
+          # ── FAISS persistent storage ──────────────────────────────────────
+          volumeMounts:
+            - name: faiss-storage
+              mountPath: /data/faiss_index
+
+          # ── Health probes ─────────────────────────────────────────────────
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+
+          # ── Resource limits (tune for your hardware) ──────────────────────
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+
+      volumes:
+        - name: faiss-storage
+          persistentVolumeClaim:
+            claimName: faiss-index-pvc

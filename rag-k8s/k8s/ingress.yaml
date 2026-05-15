@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rag-ingress
+  namespace: rag-assistant
+  labels:
+    app.kubernetes.io/name: rag-assistant
+  annotations:
+    # Enable minikube's built-in nginx ingress controller.
+    # Run: minikube addons enable ingress
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"   # LLM inference can be slow
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: rag-assistant.local    # Add to /etc/hosts: $(minikube ip) rag-assistant.local
+      http:
+        paths:
+          # REST backend receives all external traffic and proxies to rag-api internally
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rest-backend-svc
+                port:
+                  number: 5000
+          # Direct API access for testing / debugging
+          - path: /rag
+            pathType: Prefix
+            backend:
+              service:
+                name: rag-api-svc
+                port:
+                  number: 8000

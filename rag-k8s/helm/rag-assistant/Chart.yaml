@@ -1,0 +1,24 @@
+apiVersion: v2
+name: rag-assistant
+description: >
+  Helm chart for the University of Toledo RAG AI Knowledge Assistant.
+  Deploys a Python LangChain+FAISS inference service and a C# REST backend
+  microservice into a Kubernetes cluster, with FAISS index persistence via PVC.
+
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+keywords:
+  - rag
+  - llm
+  - faiss
+  - langchain
+  - mistral
+  - ai-inference
+
+maintainers:
+  - name: Karthikeya Jaghni
+    email: jaghnik@gmail.com
+
+home: https://github.com/Kk-1020/rag-assistant-k8s
